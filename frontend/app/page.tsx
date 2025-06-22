@@ -1,14 +1,98 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Upload, FileText, X, Play, Pause, Square, RotateCcw } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
+
+// Optimized text segment interface
+interface TextSegment {
+  content: string
+  isWord: boolean
+  wordIndex: number
+  lineIndex: number
+  segmentIndex: number
+}
+
+// Memoized component for rendering individual text segments
+const TextSegment = React.memo(({ 
+  segment, 
+  currentWordIndex 
+}: { 
+  segment: TextSegment
+  currentWordIndex: number 
+}) => {
+  const isHighlighted = segment.isWord && segment.wordIndex === currentWordIndex
+  
+  return (
+    <span
+      data-word-index={segment.isWord ? segment.wordIndex : undefined}
+      className={`${
+        isHighlighted ? "bg-yellow-300 text-yellow-900 px-1 rounded shadow-sm transition-all duration-200" : ""
+      }`}
+    >
+      {segment.content}
+    </span>
+  )
+})
+
+TextSegment.displayName = "TextSegment"
+
+// Memoized component for rendering text lines
+const TextLine = React.memo(({ 
+  segments, 
+  lineIndex, 
+  currentWordIndex,
+  isLastLine 
+}: { 
+  segments: TextSegment[]
+  lineIndex: number
+  currentWordIndex: number
+  isLastLine: boolean
+}) => {
+  return (
+    <div className="leading-relaxed">
+      {segments.map((segment) => (
+        <TextSegment
+          key={`${segment.lineIndex}-${segment.segmentIndex}`}
+          segment={segment}
+          currentWordIndex={currentWordIndex}
+        />
+      ))}
+      {!isLastLine && <br />}
+    </div>
+  )
+})
+
+TextLine.displayName = "TextLine"
+
+// Memoized component for rendering the entire text content
+const TextContent = React.memo(({ 
+  textStructure, 
+  currentWordIndex 
+}: { 
+  textStructure: TextSegment[][]
+  currentWordIndex: number 
+}) => {
+  return (
+    <div className="text-gray-800 font-serif text-base">
+      {textStructure.map((lineSegments, lineIndex) => (
+        <TextLine
+          key={lineIndex}
+          segments={lineSegments}
+          lineIndex={lineIndex}
+          currentWordIndex={currentWordIndex}
+          isLastLine={lineIndex === textStructure.length - 1}
+        />
+      ))}
+    </div>
+  )
+})
+
+TextContent.displayName = "TextContent"
 
 export default function StoryReader() {
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -26,14 +110,41 @@ export default function StoryReader() {
   const textContainerRef = useRef<HTMLDivElement>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Split text into words when story is loaded
-  useEffect(() => {
-    if (storyText) {
-      const wordArray = storyText.split(/(\s+)/).filter((word) => word.trim().length > 0)
-      setWords(wordArray)
-      setCurrentWordIndex(-1)
-    }
+  // Memoize the text structure - only recalculate when storyText changes
+  const textStructure = useMemo(() => {
+    if (!storyText) return []
+    
+    let wordIndex = 0
+    const lines = storyText.split("\n")
+    
+    return lines.map((line, lineIndex) => {
+      const lineWords = line.split(/(\s+)/)
+      return lineWords.map((segment, segmentIndex) => {
+        const isWord = segment.trim().length > 0
+        const currentWordIndex = isWord ? wordIndex++ : -1
+        
+        return {
+          content: segment,
+          isWord,
+          wordIndex: currentWordIndex,
+          lineIndex,
+          segmentIndex
+        } as TextSegment
+      })
+    })
   }, [storyText])
+
+  // Memoize words array - only recalculate when storyText changes
+  const wordsArray = useMemo(() => {
+    if (!storyText) return []
+    return storyText.split(/(\s+)/).filter((word) => word.trim().length > 0)
+  }, [storyText])
+
+  // Update words state when wordsArray changes
+  useEffect(() => {
+    setWords(wordsArray)
+    setCurrentWordIndex(-1)
+  }, [wordsArray])
 
   // Handle highlighting interval
   useEffect(() => {
@@ -85,7 +196,7 @@ export default function StoryReader() {
     }
   }, [currentWordIndex])
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -111,79 +222,44 @@ export default function StoryReader() {
       setIsUploading(false)
       alert("Error reading file. Please try again.")
     }
-  }
+  }, [])
 
-  const clearStory = () => {
+  const clearStory = useCallback(() => {
     setStoryText("")
     setFileName("")
     setWords([])
     setCurrentWordIndex(-1)
     setIsPlaying(false)
-  }
+  }, [])
 
-  const handlePlay = () => {
+  const handlePlay = useCallback(() => {
     if (currentWordIndex === -1) {
       setCurrentWordIndex(0)
     }
     setIsPlaying(true)
-  }
+  }, [currentWordIndex])
 
-  const handlePause = () => {
+  const handlePause = useCallback(() => {
     setIsPlaying(false)
-  }
+  }, [])
 
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
     setIsPlaying(false)
     setCurrentWordIndex(-1)
-  }
+  }, [])
 
-  const handleRestart = () => {
+  const handleRestart = useCallback(() => {
     setIsPlaying(false)
     setCurrentWordIndex(-1)
     setTimeout(() => {
       setCurrentWordIndex(0)
       setIsPlaying(true)
     }, 100)
-  }
+  }, [])
 
-  const renderHighlightedText = () => {
-    if (!storyText || words.length === 0) return null
-
-    let wordIndex = 0
-    const lines = storyText.split("\n")
-
-    return lines.map((line, lineIndex) => {
-      const lineWords = line.split(/(\s+)/)
-      const renderedLine = lineWords.map((segment, segmentIndex) => {
-        if (segment.trim().length === 0) {
-          return <span key={`${lineIndex}-${segmentIndex}`}>{segment}</span>
-        }
-
-        const isHighlighted = wordIndex === currentWordIndex
-        const currentIndex = wordIndex
-        wordIndex++
-
-        return (
-          <span
-            key={`${lineIndex}-${segmentIndex}`}
-            data-word-index={currentIndex}
-            className={`${
-              isHighlighted ? "bg-yellow-300 text-yellow-900 px-1 rounded shadow-sm transition-all duration-200" : ""
-            }`}
-          >
-            {segment}
-          </span>
-        )
-      })
-
-      return (
-        <div key={lineIndex} className="leading-relaxed">
-          {renderedLine}
-          {lineIndex < lines.length - 1 && <br />}
-        </div>
-      )
-    })
-  }
+  const handleSpeedChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSpeed(Number(e.target.value))
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4">
@@ -244,7 +320,7 @@ export default function StoryReader() {
                   <select
                     id="speed"
                     value={speed}
-                    onChange={(e) => setSpeed(Number(e.target.value))}
+                    onChange={handleSpeedChange}
                     className="text-sm border border-gray-300 rounded px-2 py-1"
                   >
                     <option value={2000}>Slow (2s)</option>
@@ -293,7 +369,10 @@ export default function StoryReader() {
               <ScrollArea className="h-[600px]" ref={scrollAreaRef}>
                 <div className="p-8" ref={textContainerRef}>
                   <div className="prose prose-lg max-w-none">
-                    <div className="text-gray-800 font-serif text-base">{renderHighlightedText()}</div>
+                    <TextContent 
+                      textStructure={textStructure}
+                      currentWordIndex={currentWordIndex}
+                    />
                   </div>
                 </div>
               </ScrollArea>
