@@ -26,13 +26,9 @@ app.add_middleware(
 )
 
 # Include routers with API prefix
-app.include_router(texts_router, prefix=settings.API_PREFIX)
+app.include_router(texts_router)
 
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "message": "Ballad AI Backend is running"}
-
-@app.get("/")
-async def root():
-    return {"message": "Welcome to Ballad AI Backend", "docs": "/docs"}
