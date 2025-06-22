@@ -8,31 +8,44 @@ import { Label } from "@/components/ui/label"
 import { Upload, FileText, X, Play, Pause, Square, RotateCcw } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-// Optimized text segment interface
+// Updated interfaces for timing data
+interface WordTiming {
+  word: string
+  start: number
+  end: number
+  line: number
+}
+
 interface TextSegment {
   content: string
   isWord: boolean
   wordIndex: number
   lineIndex: number
   segmentIndex: number
+  timing?: WordTiming
 }
 
 // Memoized component for rendering individual text segments
-const TextSegment = React.memo(({ 
-  segment, 
-  currentWordIndex 
-}: { 
+const TextSegment = React.memo(({
+  segment,
+  currentTime,
+  isPlaying
+}: {
   segment: TextSegment
-  currentWordIndex: number 
+  currentTime: number
+  isPlaying: boolean
 }) => {
-  const isHighlighted = segment.isWord && segment.wordIndex === currentWordIndex
-  
+  const isHighlighted = segment.isWord &&
+    segment.timing &&
+    isPlaying &&
+    currentTime >= segment.timing.start &&
+    currentTime <= segment.timing.end
+
   return (
     <span
       data-word-index={segment.isWord ? segment.wordIndex : undefined}
-      className={`${
-        isHighlighted ? "bg-yellow-300 text-yellow-900 px-1 rounded shadow-sm transition-all duration-200" : ""
-      }`}
+      className={`${isHighlighted ? "bg-yellow-300 text-yellow-900 px-1 rounded shadow-sm transition-all duration-200" : ""
+        }`}
     >
       {segment.content}
     </span>
@@ -42,15 +55,17 @@ const TextSegment = React.memo(({
 TextSegment.displayName = "TextSegment"
 
 // Memoized component for rendering text lines
-const TextLine = React.memo(({ 
-  segments, 
-  lineIndex, 
-  currentWordIndex,
-  isLastLine 
-}: { 
+const TextLine = React.memo(({
+  segments,
+  lineIndex,
+  currentTime,
+  isPlaying,
+  isLastLine
+}: {
   segments: TextSegment[]
   lineIndex: number
-  currentWordIndex: number
+  currentTime: number
+  isPlaying: boolean
   isLastLine: boolean
 }) => {
   return (
@@ -59,7 +74,8 @@ const TextLine = React.memo(({
         <TextSegment
           key={`${segment.lineIndex}-${segment.segmentIndex}`}
           segment={segment}
-          currentWordIndex={currentWordIndex}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
         />
       ))}
       {!isLastLine && <br />}
@@ -70,12 +86,14 @@ const TextLine = React.memo(({
 TextLine.displayName = "TextLine"
 
 // Memoized component for rendering the entire text content
-const TextContent = React.memo(({ 
-  textStructure, 
-  currentWordIndex 
-}: { 
+const TextContent = React.memo(({
+  textStructure,
+  currentTime,
+  isPlaying
+}: {
   textStructure: TextSegment[][]
-  currentWordIndex: number 
+  currentTime: number
+  isPlaying: boolean
 }) => {
   return (
     <div className="text-gray-800 font-serif text-base">
@@ -84,7 +102,8 @@ const TextContent = React.memo(({
           key={lineIndex}
           segments={lineSegments}
           lineIndex={lineIndex}
-          currentWordIndex={currentWordIndex}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
           isLastLine={lineIndex === textStructure.length - 1}
         />
       ))}
@@ -96,105 +115,139 @@ TextContent.displayName = "TextContent"
 
 export default function StoryReader() {
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [storyText, setStoryText] = useState("")
+  const [wordTimings, setWordTimings] = useState<WordTiming[]>([])
   const [fileName, setFileName] = useState("")
   const [isUploading, setIsUploading] = useState(false)
 
-  // Highlighting states
-  const [words, setWords] = useState<string[]>([])
-  const [currentWordIndex, setCurrentWordIndex] = useState(-1)
+  // Timing states
+  const [currentTime, setCurrentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [speed, setSpeed] = useState(1000) // milliseconds per word
+  const [totalDuration, setTotalDuration] = useState(0)
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const textContainerRef = useRef<HTMLDivElement>(null)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const startTimeRef = useRef<number>(0)
+  const animationFrameRef = useRef<number | null>(null)
 
-  // Memoize the text structure - only recalculate when storyText changes
+  // Memoize the text structure from word timing data
   const textStructure = useMemo(() => {
-    if (!storyText) return []
-    
-    let wordIndex = 0
-    const lines = storyText.split("\n")
-    
-    return lines.map((line, lineIndex) => {
-      const lineWords = line.split(/(\s+)/)
-      return lineWords.map((segment, segmentIndex) => {
-        const isWord = segment.trim().length > 0
-        const currentWordIndex = isWord ? wordIndex++ : -1
-        
-        return {
-          content: segment,
-          isWord,
-          wordIndex: currentWordIndex,
-          lineIndex,
-          segmentIndex
-        } as TextSegment
-      })
+    if (!wordTimings.length) return []
+
+    // Group words by line number
+    const lineGroups: { [lineNumber: number]: WordTiming[] } = {}
+    wordTimings.forEach((wordTiming) => {
+      if (!lineGroups[wordTiming.line]) {
+        lineGroups[wordTiming.line] = []
+      }
+      lineGroups[wordTiming.line].push(wordTiming)
     })
-  }, [storyText])
 
-  // Memoize words array - only recalculate when storyText changes
-  const wordsArray = useMemo(() => {
-    if (!storyText) return []
-    return storyText.split(/(\s+)/).filter((word) => word.trim().length > 0)
-  }, [storyText])
+    // Convert to text structure with segments
+    const lines = Object.keys(lineGroups)
+      .sort((a, b) => parseInt(a) - parseInt(b))
+      .map(lineNumber => lineGroups[parseInt(lineNumber)])
 
-  // Update words state when wordsArray changes
-  useEffect(() => {
-    setWords(wordsArray)
-    setCurrentWordIndex(-1)
-  }, [wordsArray])
+    return lines.map((lineWords, lineIndex) => {
+      const segments: TextSegment[] = []
 
-  // Handle highlighting interval
-  useEffect(() => {
-    if (isPlaying && words.length > 0) {
-      intervalRef.current = setInterval(() => {
-        setCurrentWordIndex((prev) => {
-          if (prev >= words.length - 1) {
-            setIsPlaying(false)
-            return prev
-          }
-          return prev + 1
+      lineWords.forEach((wordTiming, wordIndex) => {
+        // Add the word segment
+        segments.push({
+          content: wordTiming.word,
+          isWord: true,
+          wordIndex: wordTimings.indexOf(wordTiming),
+          lineIndex,
+          segmentIndex: segments.length,
+          timing: wordTiming
         })
-      }, speed)
+
+        // Add space after word (except for last word in line)
+        if (wordIndex < lineWords.length - 1) {
+          segments.push({
+            content: " ",
+            isWord: false,
+            wordIndex: -1,
+            lineIndex,
+            segmentIndex: segments.length
+          })
+        }
+      })
+
+      return segments
+    })
+  }, [wordTimings])
+
+  // Calculate total duration from word timings
+  useEffect(() => {
+    if (wordTimings.length > 0) {
+      const maxEndTime = Math.max(...wordTimings.map(w => w.end))
+      setTotalDuration(maxEndTime)
+    }
+  }, [wordTimings])
+
+  // Animation loop for time-based highlighting
+  useEffect(() => {
+    if (isPlaying) {
+      const animate = () => {
+        const elapsed = (Date.now() - startTimeRef.current) / 1000
+        setCurrentTime(elapsed)
+
+        if (elapsed < totalDuration) {
+          animationFrameRef.current = requestAnimationFrame(animate)
+        } else {
+          setIsPlaying(false)
+          setCurrentTime(totalDuration)
+        }
+      }
+
+      startTimeRef.current = Date.now() - currentTime * 1000
+      animationFrameRef.current = requestAnimationFrame(animate)
     } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
       }
     }
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [isPlaying, words.length, speed])
+  }, [isPlaying, totalDuration])
 
   // Auto-scroll to keep highlighted word in view
   useEffect(() => {
-    if (currentWordIndex >= 0 && textContainerRef.current && scrollAreaRef.current) {
-      const highlightedElement = textContainerRef.current.querySelector(`[data-word-index="${currentWordIndex}"]`)
-      if (highlightedElement) {
-        const scrollContainer = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]")
-        if (scrollContainer) {
-          const containerRect = scrollContainer.getBoundingClientRect()
-          const elementRect = highlightedElement.getBoundingClientRect()
+    if (isPlaying && textContainerRef.current && scrollAreaRef.current) {
+      // Find the currently highlighted word
+      const currentWord = wordTimings.find(w =>
+        currentTime >= w.start && currentTime <= w.end
+      )
 
-          // Calculate the position to center the highlighted word
-          const containerCenter = containerRect.height / 2
-          const elementTop = elementRect.top - containerRect.top + scrollContainer.scrollTop
-          const scrollTo = elementTop - containerCenter
+      if (currentWord) {
+        const wordIndex = wordTimings.indexOf(currentWord)
+        const highlightedElement = textContainerRef.current.querySelector(`[data-word-index="${wordIndex}"]`)
 
-          scrollContainer.scrollTo({
-            top: Math.max(0, scrollTo),
-            behavior: "smooth",
-          })
+        if (highlightedElement) {
+          const scrollContainer = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]")
+          if (scrollContainer) {
+            const containerRect = scrollContainer.getBoundingClientRect()
+            const elementRect = highlightedElement.getBoundingClientRect()
+
+            // Calculate the position to center the highlighted word
+            const containerCenter = containerRect.height / 2
+            const elementTop = elementRect.top - containerRect.top + scrollContainer.scrollTop
+            const scrollTo = elementTop - containerCenter
+
+            scrollContainer.scrollTo({
+              top: Math.max(0, scrollTo),
+              behavior: "smooth",
+            })
+          }
         }
       }
     }
-  }, [currentWordIndex])
+  }, [currentTime, isPlaying, wordTimings])
 
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -209,35 +262,52 @@ export default function StoryReader() {
     setFileName(file.name)
 
     try {
-      const text = await file.text()
-      setStoryText(text)
+      // Create FormData to send the file to the backend
+      const formData = new FormData()
+      formData.append('file', file)
 
-      // Simulate upload delay for better UX
+      // Send the file to the backend API
+      const response = await fetch('http://localhost:8000/texts', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`API request failed with status: ${response.status}`)
+      }
+
+      // Get the word timing data from the API response
+      const wordTimingData: WordTiming[] = await response.json()
+
+      if (!Array.isArray(wordTimingData) || wordTimingData.length === 0) {
+        throw new Error('No word timing data received from API')
+      }
+
+      setWordTimings(wordTimingData)
+
+      // Simulate a brief delay for better UX
       setTimeout(() => {
         setIsUploading(false)
         setIsModalOpen(false)
-      }, 1000)
+      }, 500)
     } catch (error) {
-      console.error("Error reading file:", error)
+      console.error("Error uploading file to API:", error)
       setIsUploading(false)
-      alert("Error reading file. Please try again.")
+      alert(`Error processing file: ${error instanceof Error ? error.message : 'Please try again.'}`)
     }
   }, [])
 
   const clearStory = useCallback(() => {
-    setStoryText("")
+    setWordTimings([])
     setFileName("")
-    setWords([])
-    setCurrentWordIndex(-1)
+    setCurrentTime(0)
     setIsPlaying(false)
+    setTotalDuration(0)
   }, [])
 
   const handlePlay = useCallback(() => {
-    if (currentWordIndex === -1) {
-      setCurrentWordIndex(0)
-    }
     setIsPlaying(true)
-  }, [currentWordIndex])
+  }, [])
 
   const handlePause = useCallback(() => {
     setIsPlaying(false)
@@ -245,20 +315,15 @@ export default function StoryReader() {
 
   const handleStop = useCallback(() => {
     setIsPlaying(false)
-    setCurrentWordIndex(-1)
+    setCurrentTime(0)
   }, [])
 
   const handleRestart = useCallback(() => {
     setIsPlaying(false)
-    setCurrentWordIndex(-1)
+    setCurrentTime(0)
     setTimeout(() => {
-      setCurrentWordIndex(0)
       setIsPlaying(true)
     }, 100)
-  }, [])
-
-  const handleSpeedChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSpeed(Number(e.target.value))
   }, [])
 
   return (
@@ -271,7 +336,7 @@ export default function StoryReader() {
         </div>
 
         {/* Upload Button */}
-        {!storyText && (
+        {!wordTimings.length && (
           <div className="text-center">
             <Button
               onClick={() => setIsModalOpen(true)}
@@ -285,7 +350,7 @@ export default function StoryReader() {
         )}
 
         {/* Story Display */}
-        {storyText && (
+        {wordTimings.length > 0 && (
           <div className="relative">
             {/* Controls */}
             <div className="flex items-center justify-between mb-4">
@@ -311,24 +376,6 @@ export default function StoryReader() {
                   <RotateCcw className="w-4 h-4 mr-1" />
                   Restart
                 </Button>
-
-                {/* Speed Control */}
-                <div className="flex items-center gap-2 ml-4">
-                  <Label htmlFor="speed" className="text-sm">
-                    Speed:
-                  </Label>
-                  <select
-                    id="speed"
-                    value={speed}
-                    onChange={handleSpeedChange}
-                    className="text-sm border border-gray-300 rounded px-2 py-1"
-                  >
-                    <option value={2000}>Slow (2s)</option>
-                    <option value={1500}>Normal (1.5s)</option>
-                    <option value={1000}>Fast (1s)</option>
-                    <option value={500}>Very Fast (0.5s)</option>
-                  </select>
-                </div>
               </div>
 
               <Button onClick={clearStory} variant="outline" size="sm" className="bg-white hover:bg-gray-50">
@@ -338,18 +385,18 @@ export default function StoryReader() {
             </div>
 
             {/* Progress indicator */}
-            {words.length > 0 && (
+            {totalDuration > 0 && (
               <div className="mb-4">
                 <div className="flex justify-between text-sm text-gray-600 mb-1">
                   <span>Progress</span>
                   <span>
-                    {currentWordIndex + 1} / {words.length} words
+                    {Math.round(currentTime * 10) / 10}s / {Math.round(totalDuration * 10) / 10}s
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-amber-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${((currentWordIndex + 1) / words.length) * 100}%` }}
+                    style={{ width: `${(currentTime / totalDuration) * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -369,9 +416,10 @@ export default function StoryReader() {
               <ScrollArea className="h-[600px]" ref={scrollAreaRef}>
                 <div className="p-8" ref={textContainerRef}>
                   <div className="prose prose-lg max-w-none">
-                    <TextContent 
+                    <TextContent
                       textStructure={textStructure}
-                      currentWordIndex={currentWordIndex}
+                      currentTime={currentTime}
+                      isPlaying={isPlaying}
                     />
                   </div>
                 </div>
@@ -395,7 +443,7 @@ export default function StoryReader() {
             <DialogHeader>
               <DialogTitle>Upload Your Story</DialogTitle>
               <DialogDescription>
-                Choose a .txt file containing your story to display it with guided reading highlights.
+                Choose a .txt file containing your story to display it with timed reading highlights.
               </DialogDescription>
             </DialogHeader>
 
@@ -422,8 +470,7 @@ export default function StoryReader() {
               )}
 
               <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-md">
-                <strong>Tip:</strong> The story will be displayed with word-by-word highlighting to guide your reading
-                pace.
+                <strong>Tip:</strong> The story will be displayed with precise timing-based highlighting from your API.
               </div>
             </div>
           </DialogContent>
