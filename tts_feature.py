@@ -9,20 +9,26 @@ from deepgram import (
     SpeakOptions,
 )
 
-SPEAK_TEXT = {"text": '''The morning of June 27th was clear and sunny, with the fresh warmth of a full-summer day; the flowers
-were blossoming profusely and the grass was richly green. The people of the village began to gather in
-the square, between the post office and the bank, around ten o'clock; in some towns there were so many
-people that the lottery took two days and had to be started on June 2th. but in this village, where there
-were only about three hundred people, the whole lottery took less than two hours, so it could begin at ten
-o'clock in the morning and still be through in time to allow the villagers to get home for noon dinner.'''}
+# SPEAK_TEXT = {"text": '''The morning of June 27th was clear and sunny, with the fresh warmth of a full-summer day; the flowers
+# were blossoming profusely and the grass was richly green. The people of the village began to gather in
+# the square, between the post office and the bank, around ten o'clock; in some towns there were so many
+# people that the lottery took two days and had to be started on June 2th. but in this village, where there
+# were only about three hundred people, the whole lottery took less than two hours, so it could begin at ten
+# o'clock in the morning and still be through in time to allow the villagers to get home for noon dinner.'''}
+file_path = "./lottery.txt"  # Change this to your actual path
 
 filename = "narration.mp3"
 
 def main():
     try:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Could not find file at: {file_path}")
+        
+        with open(file_path, "r", encoding="utf-8") as f:
+            text = f.read()
         # STEP 1 Create a Deepgram client using the API key from environment variables
         deepgram = DeepgramClient()
-
+        
         # STEP 2 Call the save method on the speak property
         options = SpeakOptions(
             model="aura-2-draco-en",
