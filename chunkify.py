@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from raw_text import FORMATTED_LINE
 from dotenv import load_dotenv
 
+
 # Set Anthropic API key
 load_dotenv()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -49,7 +50,7 @@ class ChunksList(BaseModel):
     chunks: list[BookChunk]
 
 litellm.enable_json_schema_validation = True
-def get_prompt_chunks(book_text: str) -> ChunksList:
+def generate_prompt_chunks(book_text: str) -> ChunksList:
     """
     Analyzes raw book text, breaks it into thematic chunks, and provides
     musical annotations for each chunk using the Anthropic Claude 3.5 Sonnet model.
@@ -86,6 +87,3 @@ Raw book text:
         response_format=ChunksList, # This is the Pydantic model for validation
     )
     return json.loads(resp.choices[0].message.content)
-
-output = get_prompt_chunks(FORMATTED_LINE)
-print(json.dumps(output, indent=2))
