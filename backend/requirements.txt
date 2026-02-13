@@ -24,7 +24,7 @@ pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.10.0
     # via backend (pyproject.toml)
-python-pydub
+pydub
     # via backend
 python-dotenv==1.1.0
     # via
