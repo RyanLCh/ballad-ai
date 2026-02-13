@@ -304,8 +304,7 @@ export default function StoryReader() {
 
 			try {
 				const API_URL =
-					process.env.NEXT_PUBLIC_API_URL ||
-					"https://localhost:8000/texts";
+					process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 				// Create FormData to send the file to the backend
 				const formData = new FormData();
 				formData.append("file", file);
