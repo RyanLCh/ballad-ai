@@ -4,7 +4,7 @@ import google.auth.transport.requests
 import requests
 import base64
 import os # Make sure os is imported
-from chunkify import generate_prompt_chunks, BookChunk, ChunksList
+from .chunkify import generate_prompt_chunks, BookChunk, ChunksList
 from raw_text import FORMATTED_LINE
 
 # --- Configuration ---
