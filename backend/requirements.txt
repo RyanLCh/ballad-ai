@@ -12,6 +12,12 @@ requests
     # via backend
 litellm
     # via backend
+google
+    # via backend
+google-auth
+    # via backend
+google-auth-transport-requests
+    # via backend
 h11==0.16.0
     # via uvicorn
 idna==3.10
