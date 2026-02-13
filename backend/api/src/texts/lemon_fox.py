@@ -208,14 +208,6 @@ def orchestrate_audio(narration_path, timeline, fade_duration=2000, duck_db=-8):
     final.export("orchestrated_output.wav", format="wav")
     print("✅ Exported: orchestrated_output.wav")
 
-
-# Example usage
-with open('story.txt', 'r') as file:
-    text = file.read()
-
-# with open('annotated_story.txt', 'r') as file:
-#         annotated_text = file.read()
-
 def create_soundtrack_for_text(text):
     word_timestamps = query_lemonfox_tts(text, LEMONFOX_API_KEY)
 
@@ -241,3 +233,11 @@ def create_soundtrack_for_text(text):
     print(timeline)
 
     orchestrate_audio("./narration.wav", timeline)
+
+if __name__=="__main__":
+    # Example usage
+    try:
+        with open('story.txt', 'r') as file:
+            test_text = file.read()
+    except FileNotFoundError:
+        print("Skipping local test: story.txt not found")
