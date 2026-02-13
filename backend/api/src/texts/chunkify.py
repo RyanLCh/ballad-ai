@@ -3,7 +3,6 @@ import os
 import litellm
 from litellm import completion 
 from pydantic import BaseModel
-from raw_text import FORMATTED_LINE
 from dotenv import load_dotenv
 
 # Set Anthropic API key
@@ -50,23 +49,27 @@ class ChunksList(BaseModel):
 
 litellm.enable_json_schema_validation = True
 
-book = f"""
-Raw book text:
-```
-{FORMATTED_LINE}
-```
-""".strip()
+def generate_prompt_chunks(formatted_text: str):
+    if not formatted_text:
+        return {"chunks": []}
+    
+    book = f"""
+    Raw book text:
+    ```
+    {formatted_text}
+    ```
+    """.strip()
 
-messages = [
-    {"role": "system", "content": INSTRUCTION},
-    {"role": "user", "content": book},
-]
+    messages = [
+        {"role": "system", "content": INSTRUCTION},
+        {"role": "user", "content": book},
+    ]
 
-resp = completion(
-    model="anthropic/claude-3-5-sonnet-20240620",
-    messages=messages,
-    response_format=ChunksList,
-)
+    resp = completion(
+        model="anthropic/claude-3-5-sonnet-20240620",
+        messages=messages,
+        response_format=ChunksList,
+    )
 
-output = json.loads(resp.choices[0].message.content)
-print(json.dumps(output, indent=2))
+    output = json.loads(resp.choices[0].message.content)
+    print(json.dumps(output, indent=2))

@@ -4,8 +4,7 @@ import google.auth.transport.requests
 import requests
 import base64
 import os # Make sure os is imported
-from .chunkify import generate_prompt_chunks, BookChunk, ChunksList
-from raw_text import FORMATTED_LINE
+from .chunkify import BookChunk, ChunksList
 
 # --- Configuration ---
 # Replace with your actual Google Cloud Project ID
@@ -125,7 +124,3 @@ def generate_song_chunks(prompt_chunks_list: dict) -> list[dict]:
         })
 
     return processed_chunks
-
-
-if __name__=="__main__":
-    print(generate_song_chunks(generate_prompt_chunks(FORMATTED_LINE)))

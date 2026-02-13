@@ -1,4 +1,10 @@
-from .lemon_fox import query_lemonfox_tts, rebuild_annotated_text, merge_timestamps_with_lines
+from .lemon_fox import (
+    query_lemonfox_tts, 
+    rebuild_annotated_text, 
+    merge_timestamps_with_lines,
+    get_music_sync_timeline,
+    orchestrate_audio
+)
 from .song_gen import generate_song_chunks
 from .chunkify import generate_prompt_chunks
 import os
@@ -15,6 +21,13 @@ async def process_text_to_multimodal(text: str, api_key: str):
     prompt_chunks = generate_prompt_chunks(annotated_text)
     music_chunks = generate_song_chunks(prompt_chunks)
     
+    # 4. Merge Narration and Music into a single file
+    # This creates 'orchestrated_output.wav'
+    timeline = get_music_sync_timeline(music_chunks, merge_timestamps_with_lines(
+        word_timestamps, annotated_text, word_to_line_map
+    ))
+    orchestrate_audio("narration.wav", timeline)
+
     # 4. Merge everything for the Frontend
     # This gives the frontend the exact timing for word highlighting
     final_merged_data = merge_timestamps_with_lines(
