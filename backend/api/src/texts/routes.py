@@ -4,6 +4,7 @@ from typing import Dict, Any
 from .logic import process_text_to_multimodal
 from api.core.config import settings
 from api.core.logging import get_logger
+import os
 
 logger = get_logger(__name__)
 
@@ -47,14 +48,18 @@ async def upload(
 
             words = text.split()
             simulated_data = []
+            current_line = 1
 
             for i, word in enumerate(words):
                 simulated_data.append({
-                    "word":word,
-                    "start": i * 0.4,
-                    "end": (i * 0.4) + 0.3,
-                    "line": (i // 8 ) + 1
+                    "word": word,
+                    "start": i * 0.45,
+                    "end": (i * 0.45) + 0.35,
+                    "line": current_line
                 })
+
+                if word.strip()[-1] in ".!?":
+                    current_line += 1
 
             return simulated_data
         
