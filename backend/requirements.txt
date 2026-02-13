@@ -10,6 +10,8 @@ fastapi==0.115.13
     # via backend (pyproject.toml)
 requests
     # via backend
+litellm
+    # via backend
 h11==0.16.0
     # via uvicorn
 idna==3.10
@@ -22,6 +24,8 @@ pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.10.0
     # via backend (pyproject.toml)
+python-pydub
+    # via backend
 python-dotenv==1.1.0
     # via
     #   backend (pyproject.toml)
