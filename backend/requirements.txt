@@ -8,6 +8,8 @@ click==8.2.1
     # via uvicorn
 fastapi==0.115.13
     # via backend (pyproject.toml)
+requests
+    # via backend
 h11==0.16.0
     # via uvicorn
 idna==3.10

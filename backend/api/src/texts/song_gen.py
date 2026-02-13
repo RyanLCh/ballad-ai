@@ -127,5 +127,5 @@ def generate_song_chunks(prompt_chunks_list: dict) -> list[dict]:
     return processed_chunks
 
 
-
-print(generate_song_chunks(generate_prompt_chunks(FORMATTED_LINE)))
+if __name__=="__main__":
+    print(generate_song_chunks(generate_prompt_chunks(FORMATTED_LINE)))
